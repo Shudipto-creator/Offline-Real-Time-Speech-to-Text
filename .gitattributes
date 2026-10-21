@@ -1,0 +1,6 @@
+*.onnx binary
+*.onnx.data binary
+*.png binary
+*.pdf binary
+*.zip binary
+*.wav binary

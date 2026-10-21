@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Runtime output
+logs/
+*.log
+
+# Downloaded model files (fetch them with scripts/download_models.py).
+# Only the per-model README (license/attribution) is kept in the repository.
+models/**
+!models/**/
+!models/**/README.md
+
+# Archives and media that should never be committed
+*.tar.bz2
+*.tgz
+*.zip
+*.onnx
+*.onnx.data
+*.wav
+*.mp3
+*.flac
+
+# Local working copy of the spec PDF (canonical copy lives in docs/)
+/Master_Prompt_Speech_to_Text_Final.pdf
+
+# Agent / editor scratch space
+.kilo/
+.claude/
+.agent/
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini

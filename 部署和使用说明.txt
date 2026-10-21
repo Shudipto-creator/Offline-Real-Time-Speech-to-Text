@@ -1,0 +1,371 @@
+离线实时语音转文字程序 - 部署和使用说明
+============================================
+
+本文档详细说明如何部署、配置和使用本离线实时语音转文字（ASR）程序。程序使用纯 Python 编写，在本地计算机上运行，不依赖网络，支持识别汉语普通话和英语，且无需唤醒词，启动即开始连续识别。
+
+============================================
+一、程序概述
+============================================
+
+本程序是一个轻量化、完全离线、纯 Python 实现的桌面语音转文字应用。它通过 sounddevice 实时采集电脑麦克风收录的外部声音，使用 sherpa-onnx 的离线流式识别模型将语音转换为文字，并在 Tkinter 图形界面中实时显示识别结果。
+
+主要特点：
+- 实时监听麦克风，持续进行语音识别，无需特定唤醒词。
+- 支持汉语普通话和英语双语识别。
+- 模型文件全部位于本地，运行期不联网，数据不上传云端。
+- 整个程序仅使用 Python 语言及其第三方库实现。
+- 提供图形界面，可选择麦克风设备、开始/停止监听、复制/清空转录结果。
+
+============================================
+二、系统要求
+============================================
+
+硬件要求：
+- Windows 10 或 Windows 11（64 位）
+- 已连接并可正常工作的麦克风（内置麦克风、USB 麦克风或耳麦均可）
+- CPU（无需 GPU）
+
+软件要求：
+- Python 3.11（64 位，推荐 3.11.x）
+- pip（Python 自带）
+
+Python 依赖库：
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| numpy | 2.4.6 | 音频数组处理 |
+| sounddevice | 0.5.6 | 麦克风音频采集 |
+| sherpa-onnx | 1.13.8 | 离线流式语音识别 |
+| pytest | 9.1.1 | 测试（可选） |
+
+============================================
+三、项目文件结构
+============================================
+
+speech2text/                            项目根目录
+├── src/speech2text/                    Python 源代码
+│   ├── main.py                         程序入口（命令行参数解析，启动 GUI）
+│   ├── gui.py                          Tkinter 图形用户界面
+│   ├── recognizer.py                   sherpa-onnx 在线识别器封装
+│   ├── audio.py                        基于 sounddevice 的麦克风音频采集
+│   ├── pipeline.py                     识别流水线（协调音频采集与识别）
+│   ├── config.py                       配置数据类与加载
+│   ├── language.py                     语言标签启发式识别（中文/英文/混合）
+│   ├── refinement.py                   可选的最终句子后处理（默认关闭）
+│   ├── logging_setup.py                日志配置（轮转文件 + 控制台）
+│   ├── __init__.py                     包初始化
+│   └── __main__.py                     支持 `python -m speech2text` 运行
+├── models/                             离线模型文件（**不随仓库分发，需下载**）
+│   └── sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/
+│       ├── encoder-epoch-99-avg-1.int8.onnx   量化编码器模型（约 181 MB）
+│       ├── decoder-epoch-99-avg-1.int8.onnx   量化解码器模型（约 13 MB）
+│       ├── joiner-epoch-99-avg-1.int8.onnx    量化连接器模型（约 3 MB）
+│       ├── tokens.txt                         词元表词汇文件（约 56 KB）
+│       └── README.md                          模型许可证与来源说明
+├── scripts/
+│   ├── check_setup.py                  环境检查脚本
+│   └── download_models.py              模型下载脚本（仅首次或重新下载时需联网）
+├── tests/                              自动化测试（pytest）
+│   ├── conftest.py                     测试公共配置与模型缺失时的跳过逻辑
+│   ├── test_core.py                    配置 / 语言标签 / 识别器测试
+│   └── test_stage8.py                  音频采集与识别流水线测试
+├── docs/
+│   ├── IMPLEMENTATION_SPECIFICATION.pdf  项目实现规范文档（英文）
+│   └── screenshots/                    程序实际识别语音的截图
+│       ├── app-main-window.png         主界面（识别中）截图
+│       └── app-transcript.png          带语言标签的转录结果截图
+├── .github/workflows/ci.yml            自动化测试流水线（Windows / Linux）
+├── requirements.txt                    Python 依赖列表
+├── config.json                         运行配置文件
+├── pyproject.toml                      项目元数据与打包配置
+├── 部署和使用说明.txt                  本文档
+└── README.md                           英文版详细说明
+
+============================================
+四、安装部署步骤
+============================================
+
+步骤 1：创建并激活虚拟环境
+
+在 PowerShell 或命令提示符中进入项目文件夹：
+
+```
+cd speech2text
+python -m venv venv
+venv\Scripts\activate
+```
+
+步骤 2：升级 pip 并安装依赖
+
+```
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+步骤 3：下载离线模型（首次使用必做，需要联网，仅执行一次）
+
+```
+python scripts\download_models.py
+```
+
+该脚本会把官方模型包（约 487 MB）下载并解压到 models/ 目录。仓库本身不包含
+模型文件（GitHub 单文件上限为 100 MB，模型无法随仓库分发），因此这一步不能省略。
+
+步骤 4：验证环境
+
+```
+set PYTHONPATH=src
+python scripts\check_setup.py
+```
+
+预期输出示例：
+
+```
+=== Speech-to-text environment check ===
+Python: 3.11.9 (64-bit)
+Platform: Windows-10-10.0.26300-SP0
+OK import: numpy
+OK import: sounddevice
+OK import: sherpa_onnx
+OK model file: encoder-epoch-99-avg-1.int8.onnx (181895032 bytes)
+OK model file: decoder-epoch-99-avg-1.int8.onnx (13091040 bytes)
+OK model file: joiner-epoch-99-avg-1.int8.onnx (3228404 bytes)
+OK model file: tokens.txt (56317 bytes)
+Input devices:
+  [0] Microsoft Sound Mapper - Input (2 in channels)
+OK app modules: no network clients found in runtime code
+OK recognizer load
+```
+
+如果任一步骤失败，请参阅“九、常见问题排查”章节。
+
+步骤 5：运行自动化测试（可选）
+
+```
+python -m pytest -v
+```
+
+若尚未下载模型，依赖模型的用例会显示为 skipped，其余用例照常通过。
+
+============================================
+五、模型下载（首次使用必做）
+============================================
+
+本仓库**不包含**模型文件。原因是 GitHub 限制单个文件不得超过 100 MB，而量化
+编码器模型约 173 MB，无法随仓库一起分发。因此首次使用（以及模型文件缺失或损坏时）
+必须运行以下命令下载一次（此步骤需要联网，执行一次后即可全程离线运行）：
+
+```
+python scripts\download_models.py
+```
+
+该脚本会从 sherpa-onnx 官方发布页下载约 487 MB 的模型归档文件，并解压到 models/ 目录下。
+
+============================================
+六、使用方法
+============================================
+
+启动程序
+
+```
+set PYTHONPATH=src
+python -m speech2text.main
+```
+
+Tkinter 窗口将打开，标题为“Offline Speech-to-Text”。
+
+进行语音识别
+
+1. 在“Microphone”下拉框中选择要使用的麦克风设备（默认优先选择真实硬件麦克风，而非 Windows 声音映射器）。
+2. 点击“Start”按钮开始监听。状态栏会先显示“Loading model...”，模型加载完成后变为“Listening”。
+3. 自然地说话，麦克风会实时采集你的声音。说话过程中，“Live partial”区域会实时显示识别中的文字。
+4. 说话停顿后（默认约 2.4 秒静音），程序会自动判定语段结束，将最终文字提交到“Transcript”区域，并加上语言标签，例如 [Chinese] 或 [English]。
+5. 点击“停止”按钮结束本次监听会话，程序会安全关闭音频流并释放资源。
+6. 点击“Copy”按钮可将全部转录内容复制到剪贴板。
+7. 点击“Clear”按钮可清空转录区域和实时部分文字。
+
+图形界面控件说明
+
+| 控件 | 说明 |
+|------|------|
+| Start | 开始麦克风采集与语音识别。首次点击时加载模型。 |
+| Stop | 停止音频流，刷新剩余语段，返回空闲状态。 |
+| Copy | 将完整转录内容复制到 Windows 剪贴板。 |
+| Clear | 清空转录区域与实时部分文字。 |
+| Refresh | 重新扫描可用音频输入设备并刷新下拉列表。 |
+| Microphone 下拉框 | 选择输入设备。系统会优先选择真实硬件麦克风。 |
+| Label 下拉框 | 显示语言偏好：auto（自动检测）、Chinese、English。 |
+| 状态栏 | 显示当前状态：Idle、Loading model...、Listening、Stopping、Error。 |
+| Live partial | 说话时的实时识别中间结果。 |
+| Transcript | 已提交的最终语段，每条前面带有检测到的语言标签。 |
+
+============================================
+七、配置说明
+============================================
+
+运行时配置保存在 config.json 文件中，可用任何文本编辑器修改。
+
+config.json 主要部分配置项：
+
+| 节 | 键 | 默认值 | 说明 |
+|----|----|--------|------|
+| model | encoder | models/.../encoder-epoch-99-avg-1.int8.onnx | 量化编码器 ONNX 模型路径 |
+| model | decoder | models/.../decoder-epoch-99-avg-1.int8.onnx | 量化解码器 ONNX 模型路径 |
+| model | joiner | models/.../joiner-epoch-99-avg-1.int8.onnx | 量化连接器 ONNX 模型路径 |
+| model | tokens | models/.../tokens.txt | 词元表文件路径 |
+| audio | sample_rate | 16000 | 识别目标采样率（Hz） |
+| audio | channels | 1 | 单声道音频 |
+| audio | block_duration_ms | 100 | 每次回调采集的音频块时长（毫秒） |
+| audio | device_index | null | null 表示自动选择首选麦克风 |
+| audio | max_queue_blocks | 100 | 音频队列最大块数，超出则丢弃 |
+| endpoint | trailing_silence_seconds | 2.4 | 判定语段结束所需的静音时长（秒） |
+| endpoint | short_trailing_silence_seconds | 1.2 | 短静音端点规则 |
+| endpoint | max_utterance_length_seconds | 20.0 | 单个语段最大长度（秒） |
+| pipeline | num_threads | 2 | 模型推理使用的 CPU 线程数 |
+| pipeline | provider | cpu | 执行提供程序（cpu 或 cuda） |
+| pipeline | max_active_paths | 4 | 束搜索活跃路径数 |
+| pipeline | decoding_method | greedy | 解码策略（greedy 或 modified_beam_search） |
+| pipeline | enable_endpoint | true | 启用自动端点检测 |
+| pipeline | language_mode | auto | 语言模式（auto、chinese、english） |
+| gui | poll_interval_ms | 50 | GUI 事件轮询间隔（毫秒） |
+| gui | max_transcript_lines | 200 | 转录区最大保留行数 |
+| gui | window_title | Offline Speech-to-Text | 窗口标题 |
+| gui | window_width | 700 | 窗口宽度（像素） |
+| gui | window_height | 600 | 窗口高度（像素） |
+| refinement | enabled | false | 可选后处理 refinement（默认关闭） |
+| refinement | model_size | tiny | refinement 模型大小（如启用） |
+| refinement | device | cpu | refinement 设备 |
+| refinement | compute_type | int8 | refinement 计算类型 |
+| refinement | min_text_length | 4 | refinement 最小文本长度 |
+
+配置示例：让识别更快提交最终文字
+
+若希望停顿后更快提交最终文字，可减小 trailing_silence_seconds：
+
+```json
+"endpoint": {
+  "trailing_silence_seconds": 1.0,
+  "short_trailing_silence_seconds": 0.6,
+  "max_utterance_length_seconds": 20.0
+}
+```
+
+配置示例：降低 CPU 占用
+
+```json
+"pipeline": {
+  "num_threads": 1,
+  "provider": "cpu"
+}
+```
+
+============================================
+八、离线运行说明
+============================================
+
+本程序专为本地离线运行设计：
+
+- 模型文件在完成一次下载后全部位于本地 models/ 目录，识别过程中不再需要网络。
+- 识别期间不联网：src/speech2text/ 下的运行时代码不导入 urllib、requests、httpx、socket 或任何网络客户端库。
+- 麦克风音频仅在本机内存中处理，绝不上传到外部服务器。
+- 唯一涉及网络的脚本是 scripts/download_models.py，仅在你手动运行以获取模型归档时使用，正常运行程序时不会用到。
+
+可用以下命令验证离线就绪状态：
+
+```
+set PYTHONPATH=src
+python scripts\check_setup.py
+```
+
+该检查会确认模型文件存在、识别器能在本地加载、运行时代码中没有网络客户端导入。
+
+============================================
+九、常见问题排查
+============================================
+
+| 问题 | 可能原因 | 解决方案 |
+|------|---------|---------|
+| ModuleNotFoundError: No module named 'speech2text' | 未设置 PYTHONPATH | 启动前先执行 `set PYTHONPATH=src` |
+| ModuleNotFoundError: No module named 'sherpa_onnx' | 依赖未安装 | 激活虚拟环境后执行 `pip install -r requirements.txt` |
+| 未检测到麦克风设备 | 麦克风被禁用或无权限 | 检查 Windows 设置 > 隐私和安全性 > 麦克风，确保允许应用访问麦克风 |
+| 出现“No audio from microphone”错误 | 选错设备或麦克风静音 | 在下拉框中选择其他设备；取消麦克风静音；说话音调大些 |
+| 识别结果乱码或为空 | 音频太安静或噪音过大 | 靠近麦克风说话；降低环境噪音；检查 Windows 声音设置中的输入音量 |
+| 最终文字从不提交 | 端点静音阈值过高 | 在 config.json 中降低 endpoint.trailing_silence_seconds |
+| CPU 占用过高 | 推理线程过多 | 在 config.json 中将 pipeline.num_threads 设为 1 |
+| 窗口无法打开 | Tkinter 后端问题 | 确保在 Windows 有显示环境下运行，避免无头/SSH 会话 |
+
+============================================
+十、程序架构简述
+============================================
+
+```
++----------------+      +----------------+      +------------------+
+|   Tkinter GUI  |<---->|  GUI Queue     |<---->| RecognitionWorker|
+|  (gui.py)      |      |  (线程安全队列)|      |  (pipeline.py)   |
++----------------+      +----------------+      +------------------+
+                                                    |
+                                                    v
++----------------+      +----------------+      +------------------+
+|                |<-----|  Recognizer    |<-----|  AudioCapture    |
+|                |      |  (recognizer.py|      |  (audio.py)      |
+|   麦克风       |----->|  sounddevice   |      |  sounddevice     |
+|   (声卡)       |      |  InputStream   |      |  InputStream     |
++----------------+      +----------------+      +------------------+
+                                                   |
+                                                   v
+                                            +-----------+
+                                            | sherpa-   |
+                                            | onnx      |
+                                            | Online    |
+                                            | Recognizer|
+                                            +-----------+
+```
+
+1. AudioCapture 打开 sounddevice.InputStream 回调，将麦克风音频转换为 16 kHz 单声道 float32，并将 100 毫秒音频块入队。
+2. RecognitionWorker 在后台线程运行，出队音频块，加载 sherpa-onnx 模型，将样本喂给 OnlineRecognizer。
+3. Recognizer 封装 sherpa_onnx.online_recognizer.OnlineRecognizer，处理流式解码、端点检测与流重置。
+4. 识别事件（PARTIAL、FINAL、STATUS、ERROR）推送到线程安全队列。
+5. SpeechToTextApp（Tkinter）每 50 毫秒轮询队列，更新实时部分文字、转录区域和状态栏。
+
+============================================
+十一、提交文件清单
+============================================
+
+| 提交文件 | 状态 | 说明 |
+|----------|------|------|
+| 程序 py 文件 | 已包含 | src/speech2text/ 共 11 个 Python 源文件，另有 scripts/ 与 tests/ 下的 5 个脚本与测试文件 |
+| 部署和使用说明.txt | 已包含 | 本文档，详细说明部署与使用步骤 |
+| 识别语音截图 | 已包含 | docs/screenshots/app-main-window.png 与 docs/screenshots/app-transcript.png |
+
+截图说明：两张截图均为本程序在本机实际运行时的真实画面。app-main-window.png
+显示识别进行中的主界面（状态栏为 Listening，左侧为实时识别内容，右侧为已提交的
+转录结果，底部为麦克风选择框）；app-transcript.png 显示较长的识别会话，每条已
+提交的语段前会自动加上语言标签（如 [Chinese]、[Mixed]），证明程序确实完成了
+汉语普通话与英语的实时识别。
+
+============================================
+十二、从 GitHub 下载后如何运行
+============================================
+
+本项目已托管在 GitHub：
+
+https://github.com/Shudipto-creator/Offline-Real-Time-Speech-to-Text
+
+下载（克隆）后按以下顺序即可运行：
+
+```
+git clone https://github.com/Shudipto-creator/Offline-Real-Time-Speech-to-Text.git
+cd Offline-Real-Time-Speech-to-Text
+python -m venv venv
+venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python scripts\download_models.py
+set PYTHONPATH=src
+python -m speech2text.main
+```
+
+其中 `python scripts\download_models.py` 用于下载仓库中不包含的离线模型
+（GitHub 单文件 100 MB 上限导致模型无法随仓库分发），只需在首次运行时执行一次。
+
+============================================
